@@ -27,7 +27,7 @@ defer gotrackfunc.Hook("PACKAGE.FUNCTION", time.Now())()
 Inject defer statement in source code
 
 ```go
-gotrackfunc./...
+gotrackfunc ./...
 ```
 
 Print report
