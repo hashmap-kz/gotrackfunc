@@ -1,7 +1,10 @@
 # gotrackfunc
 
-**Primitive function call tracker: injects defer statements via AST rewrite to count calls and measure timing. Useful
-for fast debugging and quick profiling.**
+**Primitive and hacky tool for rough timing measurements: injects `defer` statements via AST rewrite to count function
+calls and measure execution time. Useful for fast debugging and quick profiling.**
+
+**Designed for rough assessment of what slows down and where. For more accurate analysis, use proper tools - tracers,
+loggers, and profilers.**
 
 ## About
 
@@ -21,7 +24,7 @@ defer gotrackfunc.Hook("PACKAGE.FUNCTION", time.Now())()
 
 ## Usage:
 
-Inject defer statement in source code:
+Inject defer statement in source code
 
 ```go
 gotrackfunc./...
@@ -31,7 +34,6 @@ Print report
 
 ```go
 gotrackfunc summarize
-
 ```
 
 ## Example AST Injection
@@ -137,3 +139,9 @@ xlog.IsPowerOf2                     1      165          0.00
 conv.Uint32ToInt32                  1      113          0.00
 xlog.XLogSegNoToRecPtr              1      108          0.00
 ```
+
+---
+
+## License
+
+MIT License. See [LICENSE](./LICENSE) for details.
