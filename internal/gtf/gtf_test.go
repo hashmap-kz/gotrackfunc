@@ -16,13 +16,20 @@ import (
 func TestDetectModulePath(t *testing.T) {
 	tmpDir := t.TempDir()
 
+	//nolint:goconst
 	goModContent := "module github.com/example/testmod\n"
-	err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goModContent), 0o644)
+	err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goModContent), 0o600)
 	require.NoError(t, err)
 
-	oldWd, _ := os.Getwd()
-	defer os.Chdir(oldWd)
-	os.Chdir(tmpDir)
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func(dir string) {
+		err := os.Chdir(dir)
+		if err != nil {
+			t.Log(err)
+		}
+	}(oldWd)
+	require.NoError(t, os.Chdir(tmpDir))
 
 	modulePath, err := detectModulePath()
 	require.NoError(t, err)
@@ -87,16 +94,22 @@ func Bar() {}
 `
 
 	inputPath := filepath.Join(tmpDir, "input.go")
-	err := os.WriteFile(inputPath, []byte(input), 0o644)
+	err := os.WriteFile(inputPath, []byte(input), 0o600)
 	require.NoError(t, err)
 
 	goModContent := "module github.com/example/testmod\n"
-	err = os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goModContent), 0o644)
+	err = os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goModContent), 0o600)
 	require.NoError(t, err)
 
-	oldWd, _ := os.Getwd()
-	defer os.Chdir(oldWd)
-	os.Chdir(tmpDir)
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func(dir string) {
+		err := os.Chdir(dir)
+		if err != nil {
+			t.Log(err)
+		}
+	}(oldWd)
+	require.NoError(t, os.Chdir(tmpDir))
 
 	err = processFile(inputPath)
 	require.NoError(t, err)
@@ -117,16 +130,23 @@ baz.Qux 1 3000000
 `
 
 	logPath := filepath.Join(tmpDir, "gotrackfunc.log")
-	err := os.WriteFile(logPath, []byte(logContent), 0o644)
+	err := os.WriteFile(logPath, []byte(logContent), 0o600)
 	require.NoError(t, err)
 
-	oldWd, _ := os.Getwd()
-	defer os.Chdir(oldWd)
-	os.Chdir(tmpDir)
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func(dir string) {
+		err := os.Chdir(dir)
+		if err != nil {
+			t.Log(err)
+		}
+	}(oldWd)
+	require.NoError(t, os.Chdir(tmpDir))
 
 	// Redirect stdout temporarily to capture summarizeTrackLog output
 	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
 	os.Stdout = w
 
 	summarizeTrackLog()
@@ -135,7 +155,8 @@ baz.Qux 1 3000000
 	os.Stdout = oldStdout
 
 	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(r)
+	_, err = buf.ReadFrom(r)
+	require.NoError(t, err)
 
 	output := buf.String()
 	assert.Contains(t, output, "foo.Bar")
@@ -148,7 +169,7 @@ func TestExpandDotDotDot(t *testing.T) {
 
 	// Create go.mod so that packages.Load does not fail
 	goModContent := "module github.com/example/testmod\n"
-	err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goModContent), 0o644)
+	err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goModContent), 0o600)
 	require.NoError(t, err)
 
 	// Create a couple of .go files
@@ -159,10 +180,10 @@ func A() {}
 func B() {}
 `
 
-	err = os.WriteFile(filepath.Join(tmpDir, "file1.go"), []byte(file1), 0o644)
+	err = os.WriteFile(filepath.Join(tmpDir, "file1.go"), []byte(file1), 0o600)
 	require.NoError(t, err)
 
-	err = os.WriteFile(filepath.Join(tmpDir, "file2.go"), []byte(file2), 0o644)
+	err = os.WriteFile(filepath.Join(tmpDir, "file2.go"), []byte(file2), 0o600)
 	require.NoError(t, err)
 
 	// Also create a _test.go file which should NOT be included
@@ -170,13 +191,19 @@ func B() {}
 func TestA() {}
 `
 
-	err = os.WriteFile(filepath.Join(tmpDir, "file_test.go"), []byte(testFile), 0o644)
+	err = os.WriteFile(filepath.Join(tmpDir, "file_test.go"), []byte(testFile), 0o600)
 	require.NoError(t, err)
 
 	// Switch to temp dir so ./... works as intended
-	oldWd, _ := os.Getwd()
-	defer os.Chdir(oldWd)
-	os.Chdir(tmpDir)
+	oldWd, err := os.Getwd()
+	require.NoError(t, err)
+	defer func(dir string) {
+		err := os.Chdir(dir)
+		if err != nil {
+			t.Log(err)
+		}
+	}(oldWd)
+	require.NoError(t, os.Chdir(tmpDir))
 
 	files, err := expandDotDotDot()
 	require.NoError(t, err)

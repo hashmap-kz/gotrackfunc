@@ -160,7 +160,7 @@ func processFile(filename string) error {
 		return fmt.Errorf("format.Source: %w", err)
 	}
 
-	err = os.WriteFile(filename, formatted, 0o644)
+	err = os.WriteFile(filename, formatted, 0o600)
 	if err != nil {
 		return fmt.Errorf("write: %w", err)
 	}
@@ -349,7 +349,7 @@ func writer() {
 }
 `
 
-	err = os.WriteFile(path, []byte(source), 0o644)
+	err = os.WriteFile(path, []byte(source), 0o600)
 	if err != nil {
 		log.Fatalf("failed to write gotrack.go: %v", err)
 	}
@@ -372,11 +372,13 @@ func summarizeTrackLog() {
 		var name string
 		var count int
 		var elapsed int64
-		fmt.Sscanf(scanner.Text(), "%s %d %d", &name, &count, &elapsed)
+		//nolint:errcheck
+		_, _ = fmt.Sscanf(scanner.Text(), "%s %d %d", &name, &count, &elapsed)
 		counts[name] += count
 		sums[name] += elapsed
 	}
 	if err := scanner.Err(); err != nil {
+		//nolint:gocritic
 		log.Fatalf("scan error: %v", err)
 	}
 
@@ -385,7 +387,7 @@ func summarizeTrackLog() {
 		count int
 		sum   int64
 	}
-	var entries []entry
+	entries := make([]entry, 0, len(counts))
 	for name := range counts {
 		entries = append(entries, entry{
 			name:  name,
