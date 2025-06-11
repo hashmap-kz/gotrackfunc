@@ -107,7 +107,7 @@ func processFile(filename string) error {
 		return fmt.Errorf("read: %w", err)
 	}
 
-	f, err := parser.ParseFile(fset, filename, src, parser.ParseComments)
+	f, err := parser.ParseFile(fset, filename, src, parser.AllErrors)
 	if err != nil {
 		return fmt.Errorf("parse: %w", err)
 	}
