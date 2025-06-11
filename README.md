@@ -22,6 +22,32 @@ Injected line:
 defer gotrackfunc.Hook("PACKAGE.FUNCTION", time.Now())()
 ```
 
+---
+
+## Installation
+
+### Manual Installation
+
+1. Download the latest binary for your platform from
+   the [Releases page](https://github.com/hashmap-kz/gotrackfunc/releases).
+2. Place the binary in your system's `PATH` (e.g., `/usr/local/bin`).
+
+### Installation script for Unix-Based OS _(requires: tar, curl, jq)_:
+
+```bash
+(
+set -euo pipefail
+
+OS="$(uname | tr '[:upper:]' '[:lower:]')"
+ARCH="$(uname -m | sed -e 's/x86_64/amd64/' -e 's/\(arm\)\(64\)\?.*/\1\2/' -e 's/aarch64$/arm64/')"
+TAG="$(curl -s https://api.github.com/repos/hashmap-kz/gotrackfunc/releases/latest | jq -r .tag_name)"
+
+curl -L "https://github.com/hashmap-kz/gotrackfunc/releases/download/${TAG}/gotrackfunc_${TAG}_${OS}_${ARCH}.tar.gz" |
+tar -xzf - -C /usr/local/bin && \
+chmod +x /usr/local/bin/gotrackfunc
+)
+```
+
 ## Usage:
 
 Inject defer statement in source code
