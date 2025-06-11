@@ -1,3 +1,21 @@
+### Example AST Injection
+
+```
+func (stream *StreamCtl) processOneMsg(ctx context.Context, msg pgproto3.BackendMessage) (*pglogrepl.CopyDoneResult, error) {
+	defer func(start time.Time) {
+		elapsed := time.Since(start)
+		f, _ := os.OpenFile("gotrackfunc.log", os.O_APPEND|(os.O_CREATE|os.O_WRONLY), 0644)
+		if f != nil {
+			fmt.Fprintf(f, "%s 1 %d\n", "xlog.processOneMsg", elapsed.Nanoseconds())
+			f.Close()
+		}
+	}(time.Now())
+	
+	.....
+}
+```
+
+
 ### Example Report
 
 ```
