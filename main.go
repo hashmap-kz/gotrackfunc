@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/printer"
 	"go/token"
@@ -19,7 +20,6 @@ import (
 	"text/tabwriter"
 
 	"golang.org/x/tools/go/packages"
-	"golang.org/x/tools/imports"
 )
 
 func main() {
@@ -94,10 +94,24 @@ func expandDotDotDot() ([]string, error) {
 }
 
 var skipDirs = map[string]bool{
-	".git":    true,
-	".github": true,
-	".idea":   true,
-	"vendor":  true,
+	".git":        true,
+	".github":     true,
+	".idea":       true,
+	"vendor":      true,
+	"gotrackfunc": true, // don't process the hook package itself!
+}
+
+func detectModulePath() (string, error) {
+	data, err := os.ReadFile("go.mod")
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module ")), nil
+		}
+	}
+	return "", fmt.Errorf("module path not found in go.mod")
 }
 
 func processFile(filename string) error {
@@ -136,24 +150,25 @@ func processFile(filename string) error {
 
 	if injectedAny {
 		ensureImport(f, "time")
-		ensureImport(f, "fmt")
-		ensureImport(f, "os")
+		modulePath, err := detectModulePath()
+		if err != nil {
+			return fmt.Errorf("cannot detect module path: %w", err)
+		}
+		ensureImport(f, modulePath+"/gotrackfunc")
+		fmt.Fprintln(os.Stderr, modulePath)
+		ensureGotrackfuncPackage()
 	}
 
+	// Write result
 	var buf bytes.Buffer
-	cfg := &printer.Config{Mode: printer.UseSpaces | printer.TabIndent, Tabwidth: 8}
+	printer.Fprint(&buf, fset, f)
 
-	err = cfg.Fprint(&buf, fset, f)
+	formatted, err := format.Source(buf.Bytes())
 	if err != nil {
-		return fmt.Errorf("print: %w", err)
+		return fmt.Errorf("format.Source: %w", err)
 	}
 
-	out, err := imports.Process(filename, buf.Bytes(), nil)
-	if err != nil {
-		return fmt.Errorf("imports.Process: %w", err)
-	}
-
-	err = os.WriteFile(filename, out, 0o644)
+	err = os.WriteFile(filename, formatted, 0o644)
 	if err != nil {
 		return fmt.Errorf("write: %w", err)
 	}
@@ -177,130 +192,21 @@ func injectTimingDefer(fd *ast.FuncDecl, pkgName string) {
 
 	timingDefer := &ast.DeferStmt{
 		Call: &ast.CallExpr{
-			Fun: &ast.FuncLit{
-				Type: &ast.FuncType{
-					Params: &ast.FieldList{
-						List: []*ast.Field{
-							{
-								Names: []*ast.Ident{ast.NewIdent("start")},
-								Type: &ast.SelectorExpr{
-									X:   ast.NewIdent("time"),
-									Sel: ast.NewIdent("Time"),
-								},
-							},
-						},
-					},
+			Fun: &ast.CallExpr{
+				Fun: &ast.SelectorExpr{
+					X:   ast.NewIdent("gotrackfunc"),
+					Sel: ast.NewIdent("Hook"),
 				},
-				Body: &ast.BlockStmt{
-					List: []ast.Stmt{
-						&ast.AssignStmt{
-							Lhs: []ast.Expr{ast.NewIdent("elapsed")},
-							Tok: token.DEFINE,
-							Rhs: []ast.Expr{
-								&ast.CallExpr{
-									Fun: &ast.SelectorExpr{
-										X:   ast.NewIdent("time"),
-										Sel: ast.NewIdent("Since"),
-									},
-									Args: []ast.Expr{
-										ast.NewIdent("start"),
-									},
-								},
-							},
-						},
-						&ast.AssignStmt{
-							Lhs: []ast.Expr{ast.NewIdent("f"), ast.NewIdent("_")},
-							Tok: token.DEFINE,
-							Rhs: []ast.Expr{
-								&ast.CallExpr{
-									Fun: &ast.SelectorExpr{
-										X:   ast.NewIdent("os"),
-										Sel: ast.NewIdent("OpenFile"),
-									},
-									Args: []ast.Expr{
-										&ast.BasicLit{
-											Kind:  token.STRING,
-											Value: strconv.Quote("gotrackfunc.log"),
-										},
-										&ast.BinaryExpr{
-											X: &ast.SelectorExpr{
-												X:   ast.NewIdent("os"),
-												Sel: ast.NewIdent("O_APPEND"),
-											},
-											Op: token.OR,
-											Y: &ast.BinaryExpr{
-												X: &ast.SelectorExpr{
-													X:   ast.NewIdent("os"),
-													Sel: ast.NewIdent("O_CREATE"),
-												},
-												Op: token.OR,
-												Y: &ast.SelectorExpr{
-													X:   ast.NewIdent("os"),
-													Sel: ast.NewIdent("O_WRONLY"),
-												},
-											},
-										},
-										&ast.BasicLit{
-											Kind:  token.INT,
-											Value: "0644",
-										},
-									},
-								},
-							},
-						},
-						&ast.IfStmt{
-							Cond: &ast.BinaryExpr{
-								X:  ast.NewIdent("f"),
-								Op: token.NEQ,
-								Y:  ast.NewIdent("nil"),
-							},
-							Body: &ast.BlockStmt{
-								List: []ast.Stmt{
-									&ast.ExprStmt{
-										X: &ast.CallExpr{
-											Fun: &ast.SelectorExpr{
-												X:   ast.NewIdent("fmt"),
-												Sel: ast.NewIdent("Fprintf"),
-											},
-											Args: []ast.Expr{
-												ast.NewIdent("f"),
-												&ast.BasicLit{
-													Kind:  token.STRING,
-													Value: strconv.Quote("%s 1 %d\n"),
-												},
-												&ast.BasicLit{
-													Kind:  token.STRING,
-													Value: strconv.Quote(funcFullName),
-												},
-												&ast.CallExpr{
-													Fun: &ast.SelectorExpr{
-														X:   ast.NewIdent("elapsed"),
-														Sel: ast.NewIdent("Nanoseconds"),
-													},
-													Args: []ast.Expr{},
-												},
-											},
-										},
-									},
-									&ast.ExprStmt{
-										X: &ast.CallExpr{
-											Fun: &ast.SelectorExpr{
-												X:   ast.NewIdent("f"),
-												Sel: ast.NewIdent("Close"),
-											},
-										},
-									},
-								},
-							},
-						},
+				Args: []ast.Expr{
+					&ast.BasicLit{
+						Kind:  token.STRING,
+						Value: strconv.Quote(funcFullName),
 					},
-				},
-			},
-			Args: []ast.Expr{
-				&ast.CallExpr{
-					Fun: &ast.SelectorExpr{
-						X:   ast.NewIdent("time"),
-						Sel: ast.NewIdent("Now"),
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   ast.NewIdent("time"),
+							Sel: ast.NewIdent("Now"),
+						},
 					},
 				},
 			},
@@ -314,37 +220,147 @@ func alreadyHasDefer(fd *ast.FuncDecl) bool {
 	if len(fd.Body.List) == 0 {
 		return false
 	}
+
 	first, ok := fd.Body.List[0].(*ast.DeferStmt)
 	if !ok {
 		return false
 	}
 
-	// Check if defer contains "start" param (means it's our injected one)
-	callExpr, ok := first.Call.Fun.(*ast.FuncLit)
-	if !ok || callExpr.Type == nil || callExpr.Type.Params == nil {
+	callExpr := first.Call
+
+	nestedCallExpr, ok := callExpr.Fun.(*ast.CallExpr)
+	if !ok {
 		return false
 	}
-	for _, param := range callExpr.Type.Params.List {
-		if len(param.Names) > 0 && param.Names[0].Name == "start" {
-			return true
-		}
+
+	sel, ok := nestedCallExpr.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
 	}
-	return false
+
+	pkgIdent, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return false
+	}
+
+	return pkgIdent.Name == "gotrackfunc" && sel.Sel.Name == "Hook"
 }
 
 func ensureImport(f *ast.File, pkg string) {
+	// Already present?
 	for _, imp := range f.Imports {
 		if strings.Trim(imp.Path.Value, `"`) == pkg {
 			return
 		}
 	}
+
 	newImp := &ast.ImportSpec{
 		Path: &ast.BasicLit{
 			Kind:  token.STRING,
 			Value: strconv.Quote(pkg),
 		},
 	}
-	f.Imports = append(f.Imports, newImp)
+
+	// Try to find an existing import decl
+	for _, decl := range f.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.IMPORT {
+			continue
+		}
+
+		// Append to existing import block
+		genDecl.Specs = append(genDecl.Specs, newImp)
+		return
+	}
+
+	// No import block — create one
+	newGenDecl := &ast.GenDecl{
+		Tok: token.IMPORT,
+		Specs: []ast.Spec{
+			newImp,
+		},
+	}
+
+	// Prepend import block to Decls
+	f.Decls = append([]ast.Decl{newGenDecl}, f.Decls...)
+}
+
+func ensureGotrackfuncPackage() {
+	path := filepath.Join("gotrackfunc", "gotrack.go")
+
+	if _, err := os.Stat(path); err == nil {
+		// Already exists, nothing to do
+		return
+	}
+
+	log.Printf("Creating %s", path)
+
+	err := os.MkdirAll(filepath.Dir(path), 0o755)
+	if err != nil {
+		log.Fatalf("failed to create gotrackfunc dir: %v", err)
+	}
+
+	const source = `package gotrackfunc
+
+import (
+    "fmt"
+    "os"
+    "sync"
+    "time"
+)
+
+type trackEntry struct {
+    funcName string
+    elapsed  time.Duration
+}
+
+var (
+    mu      sync.Mutex
+    ch      chan trackEntry
+    started bool
+)
+
+func Hook(funcName string, start time.Time) func() {
+    ensureStarted()
+
+    return func() {
+        elapsed := time.Since(start)
+        ch <- trackEntry{funcName, elapsed}
+    }
+}
+
+func ensureStarted() {
+    mu.Lock()
+    defer mu.Unlock()
+
+    if started {
+        return
+    }
+
+    ch = make(chan trackEntry, 1000) // buffered
+    go writer()
+    started = true
+}
+
+func writer() {
+    f, err := os.OpenFile("gotrackfunc.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+    if err != nil {
+        // If cannot open -> disable logging
+        fmt.Fprintf(os.Stderr, "gotrackfunc: failed to open log file: %v\n", err)
+        return
+    }
+    defer f.Close()
+
+    for entry := range ch {
+        _, _ = fmt.Fprintf(f, "%s 1 %d\n", entry.funcName, entry.elapsed.Nanoseconds())
+    }
+}
+`
+
+	err = os.WriteFile(path, []byte(source), 0o644)
+	if err != nil {
+		log.Fatalf("failed to write gotrack.go: %v", err)
+	}
 }
 
 // subcommands
@@ -372,7 +388,6 @@ func summarizeTrackLog() {
 		log.Fatalf("scan error: %v", err)
 	}
 
-	// Prepare slice of names for sorting
 	type entry struct {
 		name  string
 		count int
@@ -387,12 +402,10 @@ func summarizeTrackLog() {
 		})
 	}
 
-	// Sort by sum DESC
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].sum > entries[j].sum
 	})
 
-	// Output with tabwriter
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "FUNCTION\tCALLS\tTOTAL_NS\tTOTAL_SEC")
 	fmt.Fprintln(w, "--------\t-----\t--------\t---------")
