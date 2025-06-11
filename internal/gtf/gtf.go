@@ -148,7 +148,6 @@ func processFile(filename string) error {
 			return fmt.Errorf("cannot detect module path: %w", err)
 		}
 		ensureImport(f, modulePath+"/gotrackfunc")
-		fmt.Fprintln(os.Stderr, modulePath)
 		ensureGotrackfuncPackage()
 	}
 
