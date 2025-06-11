@@ -1,4 +1,40 @@
-### Example AST Injection
+# gotrackfunc
+
+**Primitive function call tracker: injects defer statements via AST rewrite to count calls and measure timing. Useful
+for fast debugging and quick profiling.**
+
+## About
+
+⚠️ **WARNING: This statement will be injected into every function in
+all `*.go` files in the given target (file or `./...`).**
+
+⚠️ **WARNING: Make sure you are using a version control system (git, etc.), as this is a destructive operation - your
+source files will be modified in-place!**
+
+⚠️ **Double-check the directory where you are running `gotrackfunc`.**
+
+Injected line:
+
+```go
+defer gotrackfunc.Hook("PACKAGE.FUNCTION", time.Now())()
+```
+
+## Usage:
+
+Inject defer statement in source code:
+
+```go
+gotrackfunc./...
+```
+
+Print report
+
+```go
+gotrackfunc summarize
+
+```
+
+## Example AST Injection
 
 ```
 func ToUint64(i int64) uint64 {
@@ -18,8 +54,7 @@ func ToUint32(i int32) uint32 {
 }
 ```
 
-
-### Example Report
+## Example Final Report
 
 ```
 FUNCTION                            CALLS  TOTAL_NS     TOTAL_SEC
